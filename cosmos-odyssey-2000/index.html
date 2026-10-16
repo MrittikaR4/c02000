@@ -1,0 +1,689 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#030008">
+  <meta name="description" content="COSMOS: ODYSSEY 2000 — an educational space mission design experience.">
+  <title>COSMOS: ODYSSEY 2000 | Mission Overview</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <style>
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 100px;
+    }
+
+    body {
+      background:
+        radial-gradient(ellipse at 12% 18%, rgba(31, 2, 51, .45), transparent 38%),
+        radial-gradient(ellipse at 90% 38%, rgba(0, 43, 54, .32), transparent 36%),
+        #030008;
+    }
+
+    .site-header nav a {
+      transition: color .25s ease, opacity .25s ease;
+    }
+
+    .site-header nav a:hover,
+    .site-header nav a:focus-visible {
+      color: #80DCEB;
+    }
+
+    .home-hero {
+      position: relative;
+      min-height: 86vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+      padding: 100px 7vw 70px;
+      isolation: isolate;
+      background:
+        linear-gradient(90deg, rgba(3, 0, 8, .96) 0%, rgba(3, 0, 8, .76) 48%, rgba(3, 0, 8, .25) 100%),
+        linear-gradient(0deg, #030008 0%, transparent 30%),
+        url("https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=2200&q=85")
+        center 45% / cover no-repeat;
+    }
+
+    .home-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: radial-gradient(ellipse at 72% 44%, transparent 0%, rgba(3, 0, 8, .18) 55%, #030008 120%);
+      pointer-events: none;
+    }
+
+    .hero-content {
+      max-width: 900px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .eyebrow {
+      font-family: "Space Mono", monospace;
+      font-size: .72rem;
+      letter-spacing: .2em;
+      color: #80DCEB;
+      text-transform: uppercase;
+      margin-bottom: 26px;
+    }
+
+    .hero-title {
+      font-size: clamp(3.2rem, 9vw, 8rem);
+      line-height: .91;
+      letter-spacing: -.075em;
+      font-weight: 800;
+      margin: 0;
+      max-width: 950px;
+      text-transform: uppercase;
+    }
+
+    .hero-title span {
+      display: block;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(224, 238, 255, .85);
+    }
+
+    .hero-description {
+      max-width: 570px;
+      color: #B7C2D3;
+      line-height: 1.9;
+      font-size: 1rem;
+      margin: 30px 0 28px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .hero-cta {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 20px;
+      border: 1px solid rgba(128, 220, 235, .5);
+      color: #EAFBFF;
+      text-decoration: none;
+      font-family: "Space Mono", monospace;
+      font-size: .72rem;
+      letter-spacing: .08em;
+      background: rgba(0, 43, 54, .4);
+      transition: background .25s, transform .25s, border-color .25s;
+    }
+
+    .hero-cta:hover {
+      background: rgba(0, 43, 54, .8);
+      border-color: #80DCEB;
+      transform: translateY(-2px);
+    }
+
+    .hero-cta.secondary {
+      border-color: rgba(255, 255, 255, .22);
+      background: rgba(5, 6, 10, .35);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      margin-top: 54px;
+      font-family: "Space Mono", monospace;
+      font-size: .65rem;
+      color: #A8B5C8;
+      letter-spacing: .08em;
+    }
+
+    .hero-meta strong {
+      color: #F4F7FB;
+      display: block;
+      margin-bottom: 7px;
+      font-weight: 400;
+    }
+
+    .home-section {
+      padding: 95px 7vw;
+      scroll-margin-top: 90px;
+    }
+
+    .section-kicker {
+      color: #80DCEB;
+      font-family: "Space Mono", monospace;
+      font-size: .7rem;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+      margin-bottom: 15px;
+    }
+
+    .section-heading {
+      font-size: clamp(2rem, 5vw, 4.2rem);
+      line-height: 1.08;
+      letter-spacing: -.05em;
+      max-width: 800px;
+      margin: 0 0 20px;
+    }
+
+    .section-copy {
+      max-width: 680px;
+      color: #A8B5C8;
+      line-height: 1.85;
+      margin: 0;
+    }
+
+    .overview-layout {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 48px;
+      align-items: start;
+    }
+
+    .overview-aside {
+      padding: 28px;
+      border: 1px solid rgba(128, 220, 235, .18);
+      background: linear-gradient(135deg, rgba(9, 28, 62, .62), rgba(31, 2, 51, .3), rgba(1, 4, 10, .8));
+    }
+
+    .aside-label {
+      font-family: "Space Mono", monospace;
+      font-size: .68rem;
+      letter-spacing: .12em;
+      color: #80DCEB;
+      margin-bottom: 18px;
+    }
+
+    .aside-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 14px 0;
+      border-top: 1px solid rgba(255, 255, 255, .09);
+      font-size: .86rem;
+    }
+
+    .aside-line span:first-child {
+      color: #A8B5C8;
+    }
+
+    .aside-line span:last-child {
+      color: #F4F7FB;
+      text-align: right;
+    }
+
+    .systems-grid,
+    .home-destinations {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 38px;
+    }
+
+    .system-card,
+    .destination-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: clamp(22px, 3vw, 36px);
+      min-height: 245px;
+      color: #F4F7FB;
+      text-decoration: none;
+      overflow: hidden;
+      border: 1px solid rgba(128, 220, 235, .18);
+      background:
+        linear-gradient(145deg, rgba(9, 28, 62, .64), rgba(3, 0, 8, .75) 60%),
+        rgba(5, 6, 10, .75);
+      transition: transform .25s ease, border-color .25s ease, background .25s ease;
+    }
+
+    .system-card:hover,
+    .destination-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(128, 220, 235, .65);
+      background:
+        linear-gradient(145deg, rgba(0, 43, 54, .55), rgba(31, 2, 51, .42)),
+        rgba(5, 6, 10, .8);
+    }
+
+    .system-number,
+    .destination-number {
+      color: #80DCEB;
+      font-family: "Space Mono", monospace;
+      font-size: .68rem;
+      letter-spacing: .1em;
+    }
+
+    .system-card h3,
+    .destination-card h2 {
+      font-size: clamp(1.35rem, 2.5vw, 2rem);
+      letter-spacing: -.04em;
+      margin: 26px 0 12px;
+    }
+
+    .system-card p,
+    .destination-card p {
+      color: #A8B5C8;
+      line-height: 1.8;
+      font-size: .9rem;
+      margin: 0 0 25px;
+    }
+
+    .system-card .card-link,
+    .destination-link {
+      color: #D9F8FF;
+      font-family: "Space Mono", monospace;
+      font-size: .68rem;
+      letter-spacing: .06em;
+      margin-top: auto;
+    }
+
+    .mission-section {
+      background:
+        radial-gradient(ellipse at 85% 45%, rgba(31, 2, 51, .36), transparent 45%),
+        linear-gradient(120deg, rgba(4, 18, 38, .75), rgba(3, 0, 8, .9));
+      border-top: 1px solid rgba(128, 220, 235, .1);
+      border-bottom: 1px solid rgba(128, 220, 235, .1);
+    }
+
+    .mission-layout {
+      display: grid;
+      grid-template-columns: .8fr 1.2fr;
+      gap: 50px;
+      align-items: start;
+      margin-top: 35px;
+    }
+
+    .mission-index {
+      font-family: "Space Mono", monospace;
+      color: #80DCEB;
+      font-size: .68rem;
+      letter-spacing: .12em;
+    }
+
+    .mission-list {
+      border-top: 1px solid rgba(255, 255, 255, .13);
+    }
+
+    .mission-row {
+      display: grid;
+      grid-template-columns: 50px 1fr;
+      gap: 18px;
+      padding: 22px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, .13);
+    }
+
+    .mission-row .number {
+      color: #8A73B9;
+      font-family: "Space Mono", monospace;
+      font-size: .78rem;
+    }
+
+    .mission-row h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+
+    .mission-row p {
+      margin: 0;
+      color: #A8B5C8;
+      line-height: 1.75;
+      font-size: .87rem;
+    }
+
+    .science-band {
+      position: relative;
+      padding: 36px;
+      border: 1px solid rgba(128, 220, 235, .2);
+      background: linear-gradient(115deg, rgba(0, 43, 54, .45), rgba(31, 2, 51, .45), rgba(9, 28, 62, .5));
+      margin-top: 35px;
+    }
+
+    .science-band .band-top {
+      font-family: "Space Mono", monospace;
+      font-size: .68rem;
+      letter-spacing: .12em;
+      color: #80DCEB;
+      margin-bottom: 16px;
+    }
+
+    .science-band h3 {
+      font-size: clamp(1.5rem, 3vw, 2.6rem);
+      letter-spacing: -.04em;
+      margin: 0 0 12px;
+    }
+
+    .science-band p {
+      max-width: 690px;
+      color: #B7C2D3;
+      line-height: 1.85;
+    }
+
+    .science-band a {
+      color: #D9F8FF;
+      text-decoration-color: rgba(128, 220, 235, .5);
+      text-underline-offset: 5px;
+    }
+
+    .project-label {
+      color: #A8B5C8;
+      text-decoration: none;
+      font-family: "Space Mono", monospace;
+      font-size: .68rem;
+      letter-spacing: .12em;
+      transition: color .2s ease;
+    }
+
+    .project-label:hover {
+      color: #80DCEB;
+    }
+
+    .home-destinations {
+      margin-top: 45px;
+    }
+
+    .site-footer {
+      gap: 20px;
+    }
+
+    @media (max-width: 760px) {
+      .home-hero {
+        min-height: 80vh;
+        padding: 90px 6vw 55px;
+        background-position: 58% center;
+      }
+
+      .overview-layout,
+      .mission-layout {
+        grid-template-columns: 1fr;
+        gap: 30px;
+      }
+
+      .systems-grid,
+      .home-destinations {
+        grid-template-columns: 1fr;
+      }
+
+      .home-section {
+        padding: 70px 6vw;
+      }
+
+      .hero-meta {
+        gap: 20px;
+      }
+
+      .science-band {
+        padding: 25px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="site-header">
+    <a class="wordmark" href="#home" aria-label="COSMOS home">COSMOS<span>.</span></a>
+
+    <nav aria-label="Main navigation">
+      <a href="#overview">OVERVIEW</a>
+      <a href="#systems">SYSTEMS</a>
+      <a href="#mission">MISSION PROFILE</a>
+      <a href="#science">SCIENCE</a>
+    </nav>
+
+    <a class="project-label" href="project.html">PROJECT / 2000 ↗</a>
+  </header>
+
+  <main>
+    <!-- HOME HERO -->
+    <section class="home-hero" id="home">
+      <div class="hero-content">
+        <p class="eyebrow">AN INTERACTIVE SPACE MISSION DESIGN EXPERIENCE</p>
+
+        <h1 class="hero-title">
+          COSMOS:
+          <span>ODYSSEY</span>
+          2000
+        </h1>
+
+        <p class="hero-description">
+          Every mission begins with a question. Design the spacecraft,
+          balance the constraints, choose the science, and discover what
+          it takes to explore the unknown.
+        </p>
+
+        <div class="hero-actions">
+          <a class="hero-cta" href="project.html">EXPLORE THE PROJECT ↗</a>
+          <a class="hero-cta secondary" href="#overview">BEGIN EXPLORING ↓</a>
+        </div>
+
+        <div class="hero-meta">
+          <div>
+            <strong>01 / DESIGN</strong>
+            DEFINE THE OBJECTIVE
+          </div>
+          <div>
+            <strong>02 / ENGINEER</strong>
+            BUILD THE MISSION
+          </div>
+          <div>
+            <strong>03 / DISCOVER</strong>
+            EXPLORE THE UNKNOWN
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- OVERVIEW -->
+    <section class="home-section" id="overview">
+      <div class="overview-layout">
+        <div>
+          <p class="section-kicker">01 — OVERVIEW</p>
+          <h2 class="section-heading">Space exploration is a system of decisions.</h2>
+          <p class="section-copy">
+            COSMOS: ODYSSEY 2000 is an educational mission-design concept
+            that turns the complexity of space exploration into an interactive
+            learning experience. Players work with scientific goals,
+            spacecraft systems, launch options, power, mass, communication,
+            and mission constraints to plan a mission from concept to outcome.
+          </p>
+        </div>
+
+        <aside class="overview-aside">
+          <p class="aside-label">MISSION SNAPSHOT / 001</p>
+          <div class="aside-line">
+            <span>EXPERIENCE</span>
+            <span>Interactive learning</span>
+          </div>
+          <div class="aside-line">
+            <span>CORE IDEA</span>
+            <span>Design a space mission</span>
+          </div>
+          <div class="aside-line">
+            <span>KEY SKILLS</span>
+            <span>Science · Logic · Strategy</span>
+          </div>
+          <div class="aside-line">
+            <span>DESIGN PRINCIPLE</span>
+            <span>Every choice has a trade-off</span>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- SYSTEMS -->
+    <section class="home-section" id="systems">
+      <p class="section-kicker">02 — SYSTEMS</p>
+      <h2 class="section-heading">One mission. Interconnected systems.</h2>
+      <p class="section-copy">
+        A spacecraft is more than a vehicle. Its components must work together,
+        and improving one system can create new constraints elsewhere.
+      </p>
+
+      <div class="systems-grid">
+        <article class="system-card">
+          <span class="system-number">SYS / 01</span>
+          <h3>Science & Instruments</h3>
+          <p>
+            Choose the questions your mission should answer and the instruments
+            that can collect useful evidence.
+          </p>
+          <a class="card-link" href="science.html">EXPLORE THE SCIENCE ↗</a>
+        </article>
+
+        <article class="system-card">
+          <span class="system-number">SYS / 02</span>
+          <h3>Spacecraft Engineering</h3>
+          <p>
+            Consider mass, power, propulsion, communication, thermal control,
+            and the limits of your spacecraft design.
+          </p>
+          <a class="card-link" href="project.html">VIEW MISSION ARCHITECTURE ↗</a>
+        </article>
+
+        <article class="system-card">
+          <span class="system-number">SYS / 03</span>
+          <h3>Trajectory & Destination</h3>
+          <p>
+            Explore how a destination, travel time, orbital constraints,
+            and launch opportunities shape mission planning.
+          </p>
+          <a class="card-link" href="science.html">VISIT THE RESEARCH ARCHIVE ↗</a>
+        </article>
+
+        <article class="system-card">
+          <span class="system-number">SYS / 04</span>
+          <h3>Budget & Trade-offs</h3>
+          <p>
+            Balance resources and priorities. A successful design must satisfy
+            the mission objective without ignoring its constraints.
+          </p>
+          <a class="card-link" href="project.html">DISCOVER THE GAME CONCEPT ↗</a>
+        </article>
+      </div>
+    </section>
+
+    <!-- MISSION PROFILE -->
+    <section class="home-section mission-section" id="mission">
+      <p class="section-kicker">03 — MISSION PROFILE</p>
+      <h2 class="section-heading">From a question to a mission.</h2>
+      <p class="section-copy">
+        The proposed gameplay follows the reasoning behind real mission
+        planning. Players make decisions, review constraints, and evaluate
+        how well their final design meets its scientific objective.
+      </p>
+
+      <div class="mission-layout">
+        <div>
+          <p class="mission-index">MISSION SEQUENCE / 001—004</p>
+          <p class="section-copy">
+            Each stage builds on the last. A change in payload can affect
+            mass and power; a different destination can change the travel
+            plan, communications needs, and overall mission complexity.
+          </p>
+        </div>
+
+        <div class="mission-list">
+          <article class="mission-row">
+            <span class="number">01</span>
+            <div>
+              <h3>Define the objective</h3>
+              <p>Choose a scientific question, destination, and mission goal.</p>
+            </div>
+          </article>
+
+          <article class="mission-row">
+            <span class="number">02</span>
+            <div>
+              <h3>Design the spacecraft</h3>
+              <p>Select instruments and systems while balancing mass, power, and budget.</p>
+            </div>
+          </article>
+
+          <article class="mission-row">
+            <span class="number">03</span>
+            <div>
+              <h3>Plan the journey</h3>
+              <p>Consider launch choices, trajectory, communication, and environmental constraints.</p>
+            </div>
+          </article>
+
+          <article class="mission-row">
+            <span class="number">04</span>
+            <div>
+              <h3>Evaluate the outcome</h3>
+              <p>Review mission performance and learn how design decisions affected the result.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="home-destinations">
+        <a class="destination-card" href="project.html">
+          <span class="destination-number">01 / THE CONCEPT</span>
+          <h2>Mission Architecture</h2>
+          <p>Explore the systems, decisions, gameplay loop, and strategy behind every mission.</p>
+          <span class="destination-link">EXPLORE THE PROJECT ↗</span>
+        </a>
+
+        <a class="destination-card" href="science.html">
+          <span class="destination-number">02 / THE SCIENCE</span>
+          <h2>Beyond Earth</h2>
+          <p>Discover planets, moons, scientific questions, and real missions across the Solar System.</p>
+          <span class="destination-link">ENTER THE ARCHIVE ↗</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- SCIENCE -->
+    <section class="home-section" id="science">
+      <p class="section-kicker">04 — SCIENCE</p>
+      <h2 class="section-heading">The universe is the classroom.</h2>
+      <p class="section-copy">
+        From the inner rocky worlds to the distant ice giants, every destination
+        presents different scientific questions. Real space missions help us
+        understand how scientists investigate those questions using instruments,
+        observations, and evidence.
+      </p>
+
+      <div class="science-band">
+        <p class="band-top">RESEARCH ARCHIVE / OPEN FILE</p>
+        <h3>Explore the worlds we are still learning about.</h3>
+        <p>
+          Visit the science archive for planetary profiles, moons, exploration
+          missions, and research questions designed to make space science
+          easier to explore.
+        </p>
+        <a href="science.html">OPEN SCIENCE & MISSIONS ↗</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="wordmark" href="#home">COSMOS<span>.</span></a>
+    <p>AN EDUCATIONAL SPACE MISSION DESIGN PROJECT</p>
+    <a href="#home">BACK TO TOP ↑</a>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
