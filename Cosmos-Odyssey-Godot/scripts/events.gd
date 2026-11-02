@@ -9,7 +9,7 @@ const MALFUNCTIONS := [
 		"text": "A micro-impact kicked up a dust cloud that blinded one of your star trackers. Without it the ship is unsure which way it is pointing. (Parker Solar Probe has this problem.)",
 		"options": [
 			{"id": "backup", "label": "Switch to the backup tracker", "sub": "power −6 · small damage"},
-			{"id": "recal", "label": "Recalibrate in place", "sub": "3 days, budget −4 · medium damage"},
+			{"id": "recal", "label": "Recalibrate in place", "sub": "power −2 · 3 days · medium damage"},
 			{"id": "ignore", "label": "Ignore it", "sub": "free · big damage risk"}]},
 	{"id": "patch", "title": "Software patch in progress",
 		"text": "A software update is half-loaded when an instrument asks to restart. (This really happened to Parker in 2023.) Do you roll back or push through?",
@@ -29,12 +29,12 @@ const MALFUNCTIONS := [
 	{"id": "valve", "title": "Thruster valve sticks",
 		"text": "A valve in one of the steering thrusters is sticking open and wasting fuel.",
 		"options": [
-			{"id": "routine", "label": "Run the valve repair routine", "sub": "budget −6 · small damage"},
+			{"id": "routine", "label": "Run the valve repair routine", "sub": "power −4 · small damage"},
 			{"id": "work", "label": "Work around it", "sub": "free · bigger damage"}]},
 	{"id": "breach", "title": "Micrometeoroid hits the hull",
 		"text": "A tiny rock punched a small hole in the hull. Air is leaking slowly.",
 		"options": [
-			{"id": "patch", "label": "Patch it now", "sub": "budget −5 · small damage"},
+			{"id": "patch", "label": "Patch it now", "sub": "power −3 · small damage"},
 			{"id": "later", "label": "Deal with it later", "sub": "free · bigger damage"}]},
 ]
 
@@ -77,7 +77,7 @@ static func run_option(ev_id: String, opt_id: String, s) -> String:
 					return _join(["Backup tracker online", _hit(s, "sensors", 5, "Dust blinded a star tracker")])
 				"recal":
 					s.days += 3
-					s.budget -= 4
+					s.power -= 2
 					return _join(["Slow recalibration worked", _hit(s, "sensors", 8, "Dust blinded a star tracker")])
 				_:
 					return _join(["The ship drifted and the tracker overheated", _hit(s, "sensors", randi_range(15, 25), "Dust blinded a star tracker (ignored)")])
@@ -106,12 +106,12 @@ static func run_option(ev_id: String, opt_id: String, s) -> String:
 			return "The glitch cleared by itself."
 		"valve":
 			if opt_id == "routine":
-				s.budget -= 6
+				s.power -= 4
 				return _join(["Valve freed", _hit(s, "thrusters", 5, "Sticking thruster valve")])
 			return _join(["The ship limped on", _hit(s, "thrusters", 15, "Sticking thruster valve (worked around)")])
 		"breach":
 			if opt_id == "patch":
-				s.budget -= 5
+				s.power -= 3
 				return _join(["Hole patched", _hit(s, "hull", 6, "Micrometeoroid hit the hull")])
 			return _join(["The crack spread", _hit(s, "hull", 18, "Micrometeoroid hit the hull (ignored)")])
 		"flare":
@@ -169,8 +169,8 @@ static func resolve_power_drop(s, chosen: Array, timed_out: bool) -> Dictionary:
 		s.days += 15
 		notes.append("Thrusters were off. You drifted: +15 days. " + _hit(s, "thrusters", 10, "Thrusters off during blackout"))
 	if not keep.has("comms"):
-		s.budget -= 5
-		notes.append("No comms: budget −5. " + _hit(s, "comms", 10, "Comms off during blackout"))
+		s.days += 3
+		notes.append("No comms, guidance lost: +3 days. " + _hit(s, "comms", 10, "Comms off during blackout"))
 	if not keep.has("lab"):
 		s.science = maxi(0, s.science - 5)
 		notes.append("Science lab was off: science −5.")

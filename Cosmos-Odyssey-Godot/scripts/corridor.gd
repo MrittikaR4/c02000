@@ -1,13 +1,15 @@
 extends Node3D
-## Hand-flown asteroid corridor (arrow keys / WASD, or hold the mouse and drag).
+## Hand-flown asteroid corridor (arrow keys / WASD, controller stick, or hold the mouse and drag).
 ## Ported from src/corridor.js: fixed-step physics, fog that depends on sensor health,
 ## damage localised to the part of the ship that gets hit.
 
 const Gfx = preload("res://scripts/gfx.gd")
+const PAD_DEADZONE := 0.22
+const PAD_GAIN := 0.8   # controller steering strength (1.0 = as fast as the keyboard)
 const BX := 15.0
 const BY := 8.5
 const SPAWN_Z := -290.0
-const POOL := 90
+const POOL := 130
 
 signal finished(result)
 
@@ -40,9 +42,9 @@ func setup(cam: Camera3D, ship_node: Node3D, environment: Environment) -> void:
 
 	var meshes: Array = []
 	for k in 3:
-		meshes.append(Gfx.rock_mesh(100 + k, 6, 10))
+		meshes.append(Gfx.rock_mesh(100 + k * 7, 7, 12))
 	var mats: Array = []
-	for c in ["8d8378", "7a7068", "9a8f84"]:
+	for c in ["6e655d", "5d554f", "7b7167"]:
 		mats.append(Gfx.std_mat(Color(c), 0.0, 1.0))
 	for i in POOL:
 		var mi := MeshInstance3D.new()
@@ -85,7 +87,7 @@ func _spawn(o: Dictionary, ship_x: float, ship_y: float) -> void:
 			break
 	if slot == null:
 		return
-	var r: float = (1.1 + pow(randf(), 2.0) * 2.2) * o.size_mul
+	var r: float = (0.7 + pow(randf(), 2.2) * 1.6) * o.size_mul
 	var x := 0.0
 	var y := 0.0
 	if randf() < o.aimed:
@@ -100,7 +102,8 @@ func _spawn(o: Dictionary, ship_x: float, ship_y: float) -> void:
 	slot.r = r
 	var m: MeshInstance3D = slot.m
 	m.position = Vector3(x, y, SPAWN_Z)
-	m.scale = Vector3.ONE * r
+	m.scale = Vector3(r * _rand(0.8, 1.4), r * _rand(0.6, 1.0), r * _rand(0.8, 1.4))
+	m.rotation = Vector3(_rand(0, TAU), _rand(0, TAU), _rand(0, TAU))
 	m.visible = true
 	slot.spin = Vector3(_rand(-1, 1), _rand(-1, 1), _rand(-1, 1))
 	run.spawned += 1
@@ -164,6 +167,28 @@ func _step(h: float) -> void:
 		iy += 1.0
 	if Input.is_physical_key_pressed(KEY_DOWN) or Input.is_physical_key_pressed(KEY_S):
 		iy -= 1.0
+	var pad_active := false
+	for pad in Input.get_connected_joypads():
+		var stick := Vector2(Input.get_joy_axis(pad, JOY_AXIS_LEFT_X), -Input.get_joy_axis(pad, JOY_AXIS_LEFT_Y))
+		var mag := stick.length()
+		if mag > PAD_DEADZONE:
+			# remap deadzone..1 to 0..1, then a curve so small tilts give fine control
+			var t := clampf((mag - PAD_DEADZONE) / (1.0 - PAD_DEADZONE), 0.0, 1.0)
+			t = (0.25 * t + 0.75 * t * t * t) * PAD_GAIN
+			stick = stick.normalized() * t
+			pad_active = true
+		else:
+			stick = Vector2.ZERO
+		if Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_RIGHT):
+			stick.x += 0.6
+		if Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_LEFT):
+			stick.x -= 0.6
+		if Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_UP):
+			stick.y += 0.6
+		if Input.is_joy_button_pressed(pad, JOY_BUTTON_DPAD_DOWN):
+			stick.y -= 0.6
+		ix = clampf(ix + stick.x, -1.0, 1.0)
+		iy = clampf(iy + stick.y, -1.0, 1.0)
 	if ix == 0.0 and iy == 0.0 and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		var vp := get_viewport()
 		var mp := vp.get_mouse_position()
@@ -178,7 +203,7 @@ func _step(h: float) -> void:
 		iy = bi[1]
 
 	var max_v: float = 21.0 * thr * (1.25 if o.pilot else 1.0) * (1.3 if o.thrust_boost else 1.0)
-	var resp := minf(1.0, 5.0 * thr * h)
+	var resp := minf(1.0, (3.0 if pad_active else 5.0) * thr * h)
 	s.vx += (ix * max_v - s.vx) * resp
 	s.vy += (iy * max_v * 0.8 - s.vy) * resp
 	s.x = clampf(s.x + s.vx * h, -BX, BX)

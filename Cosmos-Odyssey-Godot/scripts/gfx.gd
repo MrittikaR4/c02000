@@ -86,9 +86,12 @@ static func rock_mesh(seed_v: int, rings: int = 5, radial: int = 9) -> ArrayMesh
 	var noise := FastNoiseLite.new()
 	noise.seed = seed_v
 	noise.frequency = 1.3
+	var fine := FastNoiseLite.new()
+	fine.seed = seed_v + 77
+	fine.frequency = 3.4
 	for i in verts.size():
 		var v := verts[i]
-		var s := 0.78 + 0.4 * (noise.get_noise_3dv(v * 2.0) * 0.5 + 0.5)
+		var s := 0.62 + 0.62 * (noise.get_noise_3dv(v * 2.0) * 0.5 + 0.5) + 0.14 * fine.get_noise_3dv(v * 3.0)
 		verts[i] = v * s
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	var src := ArrayMesh.new()

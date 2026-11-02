@@ -8,6 +8,8 @@ const State = preload("res://scripts/state.gd")
 const Events = preload("res://scripts/events.gd")
 const Gfx = preload("res://scripts/gfx.gd")
 const WorldScript = preload("res://scripts/world.gd")
+const Landing = preload("res://scripts/landing.gd")
+const SurfaceScript = preload("res://scripts/surface.gd")
 const ShipScript = preload("res://scripts/ship.gd")
 const CorridorScript = preload("res://scripts/corridor.gd")
 const UIScript = preload("res://scripts/ui.gd")
@@ -17,6 +19,7 @@ var cam: Camera3D
 var env: Environment
 var world
 var ship
+var surface
 var corridor
 var ui
 var audio
@@ -26,6 +29,16 @@ var bot := ""
 var bot_skill := 0.75
 var shot := ""
 var uitest := false
+var preview_ship := false
+var engine_view := "rear"
+var engine_level := 1.0
+var _last_leg_field := false
+var _last_leg_flare := false
+var _flares_used := 0
+var _fields_used := 0
+var preview_dy := 0.6
+var preview_light: DirectionalLight3D
+var ship_arg := ""
 var snap_every := 0.0
 var _ui_clock := 0.0
 var _ui_step := 0
@@ -53,6 +66,12 @@ func _ready() -> void:
 			bot_skill = float(a.substr(8))
 		elif a.begins_with("--shot="):
 			shot = a.substr(7)
+		elif a.begins_with("--eview="):
+			engine_view = a.substr(8)
+		elif a.begins_with("--elevel="):
+			engine_level = float(a.substr(9))
+		elif a.begins_with("--ship="):
+			ship_arg = a.substr(7)
 		elif a == "--uitest":
 			uitest = true
 		elif a.begins_with("--snap="):
@@ -90,8 +109,19 @@ func _ready() -> void:
 	world = WorldScript.new()
 	add_child(world)
 	world.setup(cam, ui.labels_host)
+	preview_light = DirectionalLight3D.new()
+	preview_light.rotation_degrees = Vector3(-28, 35, 0)
+	preview_light.light_energy = 1.6
+	preview_light.visible = false
+	add_child(preview_light)
 	ship = ShipScript.new()
+	if ship_arg != "":
+		ship.model = ship_arg
 	add_child(ship)
+	surface = SurfaceScript.new()
+	add_child(surface)
+	surface.setup(cam, env, ship, ui)
+	surface.speed = speed
 	corridor = CorridorScript.new()
 	add_child(corridor)
 	corridor.setup(cam, ship, env)
@@ -127,9 +157,49 @@ func _unhandled_input(event: InputEvent) -> void:
 			cam_dist = clampf(cam_dist * 1.1, 6.0, 400.0)
 
 
+func _load_ship() -> String:
+	if ship_arg != "":
+		return ship_arg
+	var cf := ConfigFile.new()
+	if cf.load("user://settings.cfg") == OK:
+		return str(cf.get_value("game", "ship", "orbiter"))
+	return "orbiter"
+
+
+func _load_cfg() -> Dictionary:
+	var out: Dictionary = Data.SHIP_DEFAULT.duplicate()
+	var cf := ConfigFile.new()
+	if cf.load("user://settings.cfg") == OK:
+		var saved = cf.get_value("game", "ship_cfg", {})
+		if saved is Dictionary:
+			for k in saved:
+				out[k] = saved[k]
+	return out
+
+
+func _save_cfg(c: Dictionary) -> void:
+	var cf := ConfigFile.new()
+	cf.load("user://settings.cfg")
+	cf.set_value("game", "ship_cfg", c)
+	cf.save("user://settings.cfg")
+
+
+func _save_ship(id: String) -> void:
+	var cf := ConfigFile.new()
+	cf.load("user://settings.cfg")
+	cf.set_value("game", "ship", id)
+	cf.save("user://settings.cfg")
+
+
 func _process(delta: float) -> void:
 	var dt := minf(0.05, delta)
 	t_abs += dt
+	preview_light.visible = preview_ship or shot == "shipclean" or shot == "engine"
+	if preview_ship:
+		ship.position = Vector3(0, 1.6, 0)
+		ship.rotation = Vector3(0.18, ship.rotation.y + dt * 0.6, 0)
+		cam.position = Vector3(0, 3.0, 11.5)
+		cam.look_at(Vector3(0, preview_dy, 0), Vector3.UP)
 	if uitest:
 		_ui_clock += delta
 		if _ui_clock > 0.7 / speed:
@@ -258,11 +328,11 @@ func pick_path(i: int) -> String:
 	for pid in Data.PATHS:
 		var p: Dictionary = Data.PATHS[pid]
 		var c: Dictionary = s.path_cost(p)
-		var sub := "power −%d · budget −%d · %d days" % [c.power, c.budget, c.days]
+		var sub := "power −%d · %d days" % [c.power, c.days]
 		if p.note != "":
 			sub += " · " + p.note
 		opts.append({"id": pid, "dot": cols[pid], "label": p.label, "sub": sub,
-			"disabled": c.power >= s.power or s.budget - c.budget < 0})
+			"disabled": c.power >= s.power})
 	var all_off := true
 	for o in opts:
 		if not o.disabled:
@@ -286,17 +356,37 @@ func sail(cp: Array, u0: float, u1: float, dur: float) -> void:
 
 
 func leg_events(i: int) -> Array:
-	var n := 1 if i == 1 else 2
+	# Fewer events per leg, and each kind is limited so nothing repeats too often.
+	var n := 1 if i == 1 else (2 if randf() < 0.35 else 1)
 	var list: Array = []
 	if i == 2:
 		list.append("belt")
 	if i == 3:
 		list.append("powerdrop")
-	var pool := ["corridor", "malfunction", "flare"]
-	pool.shuffle()
-	for t in pool:
-		if list.size() < n:
-			list.append(t)
+	var had_field := list.has("belt")
+	var had_flare := false
+	while list.size() < n:
+		var cand: Array = ["malfunction", "malfunction"]
+		if _flares_used < 2 and not _last_leg_flare and not had_flare:
+			cand.append("flare")
+		if _fields_used < 2 and not _last_leg_field and not had_field:
+			cand.append("corridor")
+		var pick: String = cand[randi() % cand.size()]
+		if list.has(pick):
+			break
+		list.append(pick)
+		if pick == "flare":
+			had_flare = true
+		if pick == "corridor":
+			had_field = true
+	if list.is_empty():
+		list.append("malfunction")
+	if had_flare:
+		_flares_used += 1
+	if list.has("corridor"):
+		_fields_used += 1
+	_last_leg_flare = had_flare
+	_last_leg_field = had_field
 	list.shuffle()
 	return list
 
@@ -305,7 +395,6 @@ func leg_events(i: int) -> Array:
 func travel_leg(from: int, i: int, pid: String) -> bool:
 	var c: Dictionary = s.path_cost(Data.PATHS[pid])
 	s.power -= c.power
-	s.budget -= c.budget
 	s.days += c.days
 	if guard():
 		return true
@@ -394,13 +483,13 @@ func corridor_event(pid: String, belt: bool) -> void:
 	world.set_world_visible(false)
 	orbit_on = false
 	cam_mode = "free"
-	ui.mini_text("Steer: arrow keys / WASD · or hold mouse and drag")
+	ui.mini_text("Steer: arrow keys / WASD / controller stick · or hold mouse and drag")
 	var bot_mode := ""
 	if bot != "":
 		bot_mode = "dumb" if bot == "dumb" else "smart"
 	var res: Dictionary = await corridor.run_field({
 		"speed": sp * (0.9 if belt else 1.0),
-		"count": 70 if belt else 44,
+		"count": 96 if belt else 60,
 		"size_mul": 1.15 if belt else 1.0,
 		"spawn_time": 24.0 if belt else 18.0,
 		"aimed": 0.4 if belt else 0.33,
@@ -521,26 +610,31 @@ func blackhole_special() -> void:
 func hub(i: int) -> void:
 	var st: Dictionary = Data.STOPS[i]
 	var scanned := false
+	var landed := false
 	while true:
 		cam_mode = "free"
 		orbit_on = true
 		var rep: Dictionary = s.repair_info()
 		var opts: Array = []
 		if st.has("scan") and not scanned:
-			opts.append({"id": "scan", "label": "Scan the area", "sub": "power −8 · budget −8 · gives science"})
-		opts.append({"id": "repair", "label": "Repair a system", "sub": "budget −%d · restores %d%%" % [rep.cost, rep.amount]})
-		opts.append({"id": "inspect", "label": "Inspect the heat shield", "sub": "budget −4 · 2 days · last inspected: %s" % ("never" if s.shield_checked_day < 0 else "day %d" % s.shield_checked_day)})
+			opts.append({"id": "scan", "label": "Scan the area", "sub": "power −8 · gives science"})
+		if Landing.has_landing(st.id) and not landed:
+			opts.append({"id": "land", "label": "Land on %s" % Landing.BODIES[st.id].body, "sub": "power −6 · 1 day · surface tasks, search for life", "disabled": s.power < 30})
+		opts.append({"id": "repair", "label": "Repair a system", "sub": "power −%d · restores %d%%" % [rep.cost, rep.amount]})
+		opts.append({"id": "inspect", "label": "Inspect the heat shield", "sub": "power −2 · 2 days · last inspected: %s" % ("never" if s.shield_checked_day < 0 else "day %d" % s.shield_checked_day)})
 		opts.append({"id": "depart", "label": "Depart for the next stop", "sub": ""})
 		var pick: String = await ui.choose("hub", st.name, "Parked. You can drag to look around. What now?", opts)
 		if pick == "depart":
 			return
 		if pick == "scan":
 			s.power -= 8
-			s.budget -= 8
 			var g: int = s.scan_gain(st.scan.base)
 			s.science += g
 			scanned = true
 			ui.toast("%s Science +%d" % [st.scan.text, g], "good")
+		elif pick == "land":
+			landed = true
+			await land(i)
 		elif pick == "inspect":
 			var before: int = s.known_shield
 			var real: int = s.inspect_shield()
@@ -555,10 +649,10 @@ func hub(i: int) -> void:
 				ropts.append({"id": x.id, "label": x.name, "sub": ("last known %d" % shown if x.id == "shield" else "%d" % shown) + "%",
 					"disabled": x.id != "shield" and s.h[x.id] >= 100})
 			ropts.append({"id": "cancel", "label": "Cancel", "sub": ""})
-			var target: String = await ui.choose("repair", "Repair which system?", "Costs budget %d." % rep.cost, ropts)
+			var target: String = await ui.choose("repair", "Repair which system?", "Costs %d power." % rep.cost, ropts)
 			if target != "cancel":
-				if s.budget < rep.cost:
-					ui.toast("Not enough budget for a repair.", "bad")
+				if s.power <= rep.cost:
+					ui.toast("Not enough power for a repair.", "bad")
 				else:
 					var blind: bool = target == "shield" and s.known_shield != s.h.shield
 					s.repair(target)
@@ -568,6 +662,128 @@ func hub(i: int) -> void:
 						ui.toast("%s repaired." % State.sub_name(target), "good")
 		if guard():
 			return
+
+
+func land(i: int) -> void:
+	var st: Dictionary = Data.STOPS[i]
+	var info: Dictionary = Landing.BODIES[st.id]
+	var sopts: Array = []
+	for k in info.sites.size():
+		var si: Dictionary = info.sites[k]
+		sopts.append({"id": str(k), "label": si.name, "sub": "%s · %s" % [Landing.risk_label(si.risk), si.note]})
+	sopts.append({"id": "cancel", "label": "Stay in orbit", "sub": ""})
+	var pick: String = await ui.choose("site", "Land on %s" % info.body, "Choose a landing site. Riskier terrain can need a harder descent. Good thrusters, sensors and comms make a safe landing more likely.", sopts)
+	if pick == "cancel":
+		return
+	var site: Dictionary = info.sites[int(pick)]
+	s.power -= 6
+	s.days += 1
+	var vis_on: bool = bot == "" and shot == ""
+	var skill: float = (0.5 * s.h.thrusters + 0.3 * s.h.sensors + 0.2 * s.h.comms) / 100.0 + (0.1 if s.has("pilot") else 0.0)
+	var fail: float = clampf(site.risk * (1.6 - skill * 1.2), 0.03, 0.8)
+	var hard: bool = randf() < fail
+	if vis_on:
+		cam_mode = "free"
+		orbit_on = false
+		world.set_world_visible(false)
+		surface.speed = speed
+		surface.enter(st.id)
+		await surface.descent(hard)
+	audio.thud()
+	if hard:
+		var dh: int = s.damage("hull", float(randi_range(8, 18)), "Hard landing on %s" % info.body)
+		var dt: int = s.damage("thrusters", float(randi_range(4, 12)), "Hard landing on %s" % info.body)
+		refresh()
+		await ui.say("Hard landing", "The ship came down too fast at %s. Hull −%d%%, thrusters −%d%%." % [site.name, dh, dt])
+	else:
+		refresh()
+		await ui.say("Touchdown", "Smooth landing at %s on %s." % [site.name, info.body])
+	if guard():
+		_leave_surface()
+		return
+	var done := {}
+	var life_hits := 0
+	while true:
+		var topts: Array = []
+		for t in site.tasks:
+			if done.has(t.id):
+				continue
+			var gain: int = s.scan_gain(t.sci)
+			topts.append({"id": t.id, "label": t.label, "sub": "power %s%d · %d day%s · about +%d science" % ["+" if t.power < 0 else "−", absi(t.power), t.days, "" if t.days == 1 else "s", gain],
+				"disabled": s.power < t.power + 14})
+		topts.append({"id": "leave", "label": "Return to orbit", "sub": "power −6 · 1 day · needs working thrusters"})
+		var tp: String = await ui.choose("surface", "On the surface: %s" % site.name, "Each task can be done once. Keep at least 14 power in reserve to lift off.", topts)
+		if tp == "leave":
+			break
+		var task: Dictionary = {}
+		for t in site.tasks:
+			if t.id == tp:
+				task = t
+		done[tp] = true
+		var found := false
+		if task.has("life") and randf() < float(task.life):
+			found = true
+		var hz := ""
+		if randf() < float(task.hazard[1]):
+			hz = task.hazard[0]
+		if vis_on:
+			await surface.do_task(Landing.VIS.get(task.id, "sample"), found)
+		s.power -= task.power
+		s.days += task.days
+		var g: int = s.scan_gain(task.sci)
+		s.science += g
+		var msg: String = "%s Science +%d." % [task.text, g]
+		if found:
+			s.science += 20
+			life_hits += 1
+			msg += " Possible sign of life found: science +20. This would need confirmation by other teams."
+		ui.toast(msg, "good")
+		if hz != "":
+			if vis_on:
+				surface.hazard_fx(hz)
+			var hm: String = Landing.hazard(s, hz, info.body)
+			if hm != "":
+				ui.toast(hm, "bad")
+		if guard():
+			_leave_surface()
+			return
+	var tries := 0
+	while true:
+		tries += 1
+		s.power -= 6
+		s.days += 1
+		var up_fail: float = clampf((100.0 - float(s.h.thrusters)) / 110.0, 0.0, 0.7)
+		if randf() >= up_fail:
+			break
+		var d2: int = s.damage("thrusters", float(randi_range(4, 8)), "Failed liftoff from %s" % info.body)
+		ui.toast("Liftoff attempt failed. Thrusters −%d%%." % d2, "bad")
+		if tries >= 3 or s.power <= 5:
+			s.failed = "The ship could not lift off from %s and the crew was stranded." % info.body
+			_leave_surface()
+			refresh()
+			return
+	if vis_on:
+		await surface.liftoff()
+		surface.leave()
+		world.set_world_visible(true)
+		var vw: Dictionary = world.view(i)
+		cam.position = vw.pos
+		cam_target = vw.target
+		cam.look_at(cam_target, Vector3.UP)
+		_sync_orbit()
+		orbit_on = true
+		cam_mode = "free"
+		place_ship(world.park_pos(i), Vector3(0, 0, -1).rotated(Vector3.UP, 0.6))
+		ship.set_flame(0.2)
+	refresh()
+	await ui.say("Back in orbit", "The ship lifted off from %s.%s" % [info.body, (" Possible life signs found: %d." % life_hits) if life_hits > 0 else ""])
+	guard()
+
+
+func _leave_surface() -> void:
+	if surface.visible:
+		surface.leave()
+		world.set_world_visible(true)
 
 
 func finale() -> void:
@@ -623,7 +839,7 @@ func end_report(tier: String, fail_reason: String, out) -> void:
 	var won := fail_reason == "" and tier != "lost"
 	var score: int = 0 if fail_reason != "" else s.score(tier)
 	var result := {"won": won, "tier": tier, "fail_reason": fail_reason, "score": score, "h": s.h.duplicate(),
-		"power": s.power, "budget": s.budget, "days": s.days, "science": s.science, "hits_logged": s.history.size()}
+		"power": s.power, "days": s.days, "science": s.science, "hits_logged": s.history.size()}
 	if out != null:
 		result["integrity"] = out.integrity
 	print("RESULT ", JSON.stringify(result))
@@ -664,9 +880,34 @@ func end_report(tier: String, fail_reason: String, out) -> void:
 
 func game() -> void:
 	await ui.title_screen("COSMOS: ODYSSEY '2000",
-		"Fly a spacecraft from Earth to the edge of the Solar System and bring it home. Every hit you take stays with the ship and changes what happens next.\n\n• Fly through asteroid fields by hand (arrow keys / WASD, or hold the mouse and drag).\n• Make quick choices when systems fail or power drops.\n• The heat shield cannot be seen from inside. Inspect it, or gamble.\n\n[color=#a9b9dd]Tip: number keys pick options, Enter continues, F11 toggles fullscreen.[/color]", "Begin")
+		"Fly a spacecraft from Earth to the edge of the Solar System and bring it home. Every hit you take stays with the ship and changes what happens next.\n\n• Fly through asteroid fields by hand (arrow keys / WASD, or hold the mouse and drag).\n• Make quick choices when systems fail or power drops.\n• The heat shield cannot be seen from inside. Inspect it, or gamble.\n\n[color=#a9b9dd]Tip: number keys pick options, Enter continues, F11 toggles fullscreen.\nController: D-pad or left stick to move, A to select, Start to continue. In asteroid fields the left stick or D-pad steers.[/color]", "Begin")
+	if Input.get_connected_joypads().size() > 0:
+		ui.toast("Controller connected: %s" % Input.get_joy_name(Input.get_connected_joypads()[0]), "good")
+	ship.visible = true
+	world.set_world_visible(false)
+	preview_ship = true
+	var chosen: String = await ui.ship_select(Data.SHIPS, _load_ship(), func(id: String):
+		if id == "custom":
+			ship.set_custom(_load_cfg())
+		else:
+			ship.set_model(id))
+	if chosen == "custom":
+		preview_dy = -1.5
+		var c: Dictionary = await ui.ship_builder(_load_cfg(), Data.SHIP_OPTS, func(c2: Dictionary): ship.set_custom(c2))
+		preview_dy = 0.6
+		_save_cfg(c)
+		ship.set_custom(c)
+	preview_ship = false
+	if chosen != "custom" and chosen != ship.model:
+		ship.set_model(chosen)
+	_save_ship(chosen)
+	ship.rotation = Vector3.ZERO
 	var crew: Array = await ui.crew_select(Data.CREW)
 	s = State.new(crew)
+	_flares_used = 0
+	_fields_used = 0
+	_last_leg_field = false
+	_last_leg_flare = false
 	refresh()
 	ship.visible = true
 	world.set_world_visible(true)
@@ -750,6 +991,12 @@ func _bot_ai(kind: String, p: Dictionary) -> Variant:
 	match p.id:
 		"path": return "ellipse" if s.power < 45 else "normal"
 		"posture": return "shield" if s.power > 40 else "hold"
+		"site": return ids[0]
+		"surface":
+			for o in enabled:
+				if o.id != "leave" and s.power > 70:
+					return o.id
+			return "leave"
 		"hub":
 			if bot == "lazy":
 				return "depart"
@@ -761,15 +1008,17 @@ func _bot_ai(kind: String, p: Dictionary) -> Variant:
 			for x in Data.SUBS:
 				if x.id != "shield" and x.id != "life" and s.h[x.id] < 60:
 					weak += 1
-			if ids.has("scan") and s.budget > 50 and s.power > 60 and _hub_count < 2:
+			if ids.has("scan") and s.power > 60 and _hub_count < 2:
 				return "scan"
+			if ids.has("land") and s.power > 92 and s.h.thrusters > 60 and _hub_count < 3:
+				return "land"
 			var need_inspect: bool = s.shield_checked_day < 0
 			for l in s.history:
 				if l.sub == "shield" and l.day >= s.shield_checked_day:
 					need_inspect = true
-			if need_inspect and s.budget > 22 and _hub_count < 3:
+			if need_inspect and s.power > 30 and _hub_count < 3:
 				return "inspect"
-			if (weak > 0 or s.known_shield < 80) and s.budget > 26 and _hub_count < 5:
+			if (weak > 0 or s.known_shield < 80) and s.power > 35 and _hub_count < 5:
 				return "repair"
 			return "depart"
 		"repair":
@@ -810,6 +1059,58 @@ func _debug_shot(name: String) -> void:
 		cam.look_at(Vector3.ZERO, Vector3.UP)
 		ship.visible = false
 		await get_tree().create_timer(1.0).timeout
+	elif name == "shipselect":
+		world.set_world_visible(false)
+		ship.visible = true
+		preview_ship = true
+		ship.rotation.y = 2.4
+		if ship_arg == "custom":
+			preview_dy = -1.5
+			ui.ship_builder(Data.SHIP_DEFAULT.duplicate(), Data.SHIP_OPTS, func(c2: Dictionary): ship.set_custom(c2))
+		else:
+			ui.ship_select(Data.SHIPS, ship_arg if ship_arg != "" else "orbiter", func(id: String): ship.set_model(id))
+		await get_tree().create_timer(0.6).timeout
+	elif name == "shipclean":
+		ui.visible = false
+		world.set_world_visible(false)
+		preview_light.visible = true
+		ship.visible = true
+		ship.position = Vector3.ZERO
+		ship.rotation = Vector3(0.12, 0.9 if ship_arg == "probe" else 2.5, 0)
+		cam.position = Vector3(0, 2.6, 10.5)
+		cam.look_at(Vector3.ZERO, Vector3.UP)
+		ship.set_flame(1.0)
+		await get_tree().create_timer(0.5).timeout
+	elif name == "joy":
+		ui.crew_select(Data.CREW)
+		await get_tree().create_timer(0.3).timeout
+		var seq := [[JOY_BUTTON_DPAD_DOWN, 0], [JOY_BUTTON_A, 0], [JOY_BUTTON_DPAD_DOWN, 0], [JOY_BUTTON_DPAD_DOWN, 0], [JOY_BUTTON_A, 0]]
+		for st in seq:
+			var ev := InputEventJoypadButton.new()
+			ev.button_index = st[0]
+			ev.pressed = true
+			Input.parse_input_event(ev)
+			await get_tree().create_timer(0.15).timeout
+	elif name == "engine":
+		ui.visible = false
+		world.set_world_visible(false)
+		preview_light.visible = true
+		ship.visible = true
+		ship.position = Vector3.ZERO
+		ship.rotation = Vector3.ZERO
+		var side := engine_view == "side"
+		cam.position = Vector3(7.5, 1.0, 3.0) if side else Vector3(2.5, 1.6, 8.5)
+		cam.look_at(Vector3(0, 0, 3.0), Vector3.UP)
+		ship.set_flame(engine_level)
+		await get_tree().create_timer(0.6).timeout
+	elif name == "shiphealthy":
+		ship.position = Vector3.ZERO
+		ship.rotation = Vector3(0.1, 2.5, 0)
+		cam.position = Vector3(7.0, 3.5, 8.0)
+		cam.look_at(Vector3.ZERO, Vector3.UP)
+		world.set_world_visible(false)
+		ship.set_flame(1.0)
+		await get_tree().create_timer(0.5).timeout
 	elif name == "ship":
 		s.h.hull = 55
 		s.h.arrays = 35
@@ -836,7 +1137,7 @@ func _debug_shot(name: String) -> void:
 			"get_params": func(): return {"thr": 1.0, "sens": 0.5},
 			"should_abort": func(): return false, "on_hit": func(_l, _a, _z): pass,
 			"on_tick": func(t): ui.mini_text("Hits: %d · Warning range: %d m" % [t.hits, t.vis])})
-		await get_tree().create_timer(9.0 / maxf(1.0, speed)).timeout
+		await get_tree().create_timer(14.0 / maxf(1.0, speed)).timeout
 	elif name == "dialog":
 		world.set_world_visible(true)
 		var v: Dictionary = world.view(3)
@@ -847,14 +1148,54 @@ func _debug_shot(name: String) -> void:
 		ui.cue(Data.CUE.suspense)
 		ui.toast("Mission start. Science +12", "good")
 		ui.choose("path", "Next stop: Mars", "Choose your route (shown on the map).", [
-			{"id": "fast", "dot": "#ff7a5c", "label": "Fast burn", "sub": "power −10 · budget −12 · 15 days · faster asteroids"},
-			{"id": "normal", "dot": "#6ee7a0", "label": "Normal route", "sub": "power −7 · budget −8 · 25 days"}])
+			{"id": "fast", "dot": "#ff7a5c", "label": "Fast burn", "sub": "power −10 · 15 days · faster asteroids"},
+			{"id": "normal", "dot": "#6ee7a0", "label": "Normal route", "sub": "power −7 · 25 days"}])
 		await get_tree().create_timer(1.0).timeout
+	elif name.begins_with("landing"):
+		var bid := "mars"
+		var tasks_seq: Array = []
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--body="):
+				bid = a.substr(7)
+			if a.begins_with("--seq="):
+				tasks_seq = a.substr(6).split(",")
+		world.set_world_visible(false)
+		cam_mode = "free"
+		orbit_on = false
+		surface.speed = speed
+		surface.enter(bid)
+		var which := name.substr(7)
+		if which == "":
+			await get_tree().create_timer(0.4).timeout
+			await surface.descent(false)
+			await get_tree().create_timer(0.6).timeout
+		elif which == "mid":
+			surface.speed = 1.0
+			surface.descent(false)
+			await get_tree().create_timer(5.2).timeout
+		else:
+			surface.speed = 6.0
+			await surface.descent(false)
+			surface.speed = 1.0
+			var vis: String = which
+			surface.do_task(vis, true)
+			await get_tree().create_timer(float(OS.get_environment("SHOTWAIT") if OS.get_environment("SHOTWAIT") != "" else "6.0")).timeout
+	elif name == "routecheck":
+		for i in range(1, Data.STOPS.size()):
+			for pid in Data.PATHS:
+				var cp: Array = world.curve(i - 1, i, pid)
+				var mn := 1e9
+				for k in range(0, 101):
+					var p: Vector3 = WorldScript.bez(cp[0], cp[1], cp[2], float(k) / 100.0)
+					for o in world.obstacles:
+						mn = minf(mn, p.distance_to(o.pos) - o.r)
+				print("ROUTE ", i, " ", pid, " min clearance ", snappedf(mn, 0.1))
+		get_tree().quit()
+		return
 	elif name == "report":
 		s.days = 212
 		s.science = 41
 		s.power = 18
-		s.budget = 33
 		s.damage("shield", 34, "Foam debris hit the heat shield at launch")
 		s.damage("sensors", 18, "Asteroid hit the sensor boom")
 		s.damage("arrays", 40, "Black hole radiation hit the arrays")

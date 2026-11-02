@@ -142,6 +142,7 @@ func _ready() -> void:
 	overlay_center = CenterContainer.new()
 	overlay_center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(overlay_center)
+	Input.joy_connection_changed.connect(_on_joy)
 	root.add_child(overlay)
 
 	# Sound toggle (bottom-right)
@@ -170,6 +171,115 @@ func _process(delta: float) -> void:
 			_result.emit("__timeout")
 
 
+func _nav_buttons() -> Array:
+	var out: Array = []
+	if overlay.visible:
+		_collect_buttons(overlay_center, out)
+	else:
+		for b in _buttons:
+			if is_instance_valid(b):
+				out.append(b)
+	return out.filter(func(b): return (b as Button).is_visible_in_tree() and not (b as Button).disabled)
+
+
+func _collect_buttons(n: Node, out: Array) -> void:
+	for c in n.get_children():
+		if c is Button:
+			out.append(c)
+		_collect_buttons(c, out)
+
+
+func _click(b: Button) -> void:
+	if b.toggle_mode:
+		b.button_pressed = not b.button_pressed
+	b.emit_signal("pressed")
+
+
+func _on_joy(device: int, connected: bool) -> void:
+	if connected:
+		toast("Controller connected: %s" % Input.get_joy_name(device), "good")
+	else:
+		toast("Controller disconnected.", "bad")
+
+
+var _joy_repeat := 0.0
+
+
+func _input(event: InputEvent) -> void:
+	# Controller: D-pad / left stick pick the button, A presses it, Start presses the main button.
+	var dir := Vector2.ZERO
+	var press := false
+	if event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed:
+		var bi: int = (event as InputEventJoypadButton).button_index
+		if bi == JOY_BUTTON_DPAD_UP:
+			dir = Vector2(0, -1)
+		elif bi == JOY_BUTTON_DPAD_DOWN:
+			dir = Vector2(0, 1)
+		elif bi == JOY_BUTTON_DPAD_LEFT:
+			dir = Vector2(-1, 0)
+		elif bi == JOY_BUTTON_DPAD_RIGHT:
+			dir = Vector2(1, 0)
+		elif bi >= 0 and bi <= 3:
+			press = true   # any face button (pads without a standard mapping number them differently)
+		else:
+			# Start, Select, shoulders and other buttons: press the main button
+			if _main_button != null and is_instance_valid(_main_button) and not _main_button.disabled and _main_button.is_visible_in_tree():
+				_main_button.emit_signal("pressed")
+				get_viewport().set_input_as_handled()
+			return
+	elif event is InputEventJoypadMotion:
+		var m := event as InputEventJoypadMotion
+		if absf(m.axis_value) < 0.7:
+			return
+		if m.axis == JOY_AXIS_LEFT_X:
+			dir = Vector2(signf(m.axis_value), 0)
+		elif m.axis == JOY_AXIS_LEFT_Y:
+			dir = Vector2(0, signf(m.axis_value))
+		else:
+			return
+	else:
+		return
+	var btns := _nav_buttons()
+	if btns.is_empty():
+		return
+	var cur: Button = null
+	var fo := get_viewport().gui_get_focus_owner()
+	if fo is Button and btns.has(fo):
+		cur = fo
+	if press:
+		if cur != null:
+			_click(cur)
+		elif _main_button != null and btns.has(_main_button):
+			_click(_main_button)
+		else:
+			(btns[0] as Button).grab_focus()
+		get_viewport().set_input_as_handled()
+		return
+	if cur == null:
+		# start on the main button when it is the only choice, otherwise the first option
+		(btns[0] as Button).grab_focus()
+		get_viewport().set_input_as_handled()
+		return
+	var c0 := cur.get_global_rect().get_center()
+	var best: Button = null
+	var best_score := INF
+	for b in btns:
+		if b == cur:
+			continue
+		var d: Vector2 = (b as Button).get_global_rect().get_center() - c0
+		var along := d.dot(dir)
+		if along <= 4.0:
+			continue
+		var side := absf(d.dot(Vector2(dir.y, dir.x)))
+		var score := along + side * 2.5
+		if score < best_score:
+			best_score = score
+			best = b
+	if best != null:
+		best.grab_focus()
+	get_viewport().set_input_as_handled()
+
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
@@ -178,10 +288,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		var idx := k - KEY_1
 		if idx < _buttons.size() and not (_buttons[idx] as Button).disabled:
 			var tb := _buttons[idx] as Button
-			if tb.toggle_mode:
-				tb.button_pressed = not tb.button_pressed
-			else:
-				tb.emit_signal("pressed")
+			_click(tb)
 			get_viewport().set_input_as_handled()
 	elif (k == KEY_ENTER or k == KEY_KP_ENTER or k == KEY_SPACE) and _main_button != null and not _main_button.disabled and _main_button.is_visible_in_tree():
 		_main_button.emit_signal("pressed")
@@ -278,7 +385,7 @@ func _rich(bb: String, size: int = 20) -> RichTextLabel:
 
 func update_hud(s) -> void:
 	_clear(hud_box)
-	for row in [["Power", s.power, 100.0], ["Budget", s.budget, 120.0]]:
+	for row in [["Power", s.power, 100.0]]:
 		var h := HBoxContainer.new()
 		var name_l := _label(row[0], 20)
 		name_l.custom_minimum_size = Vector2(84, 0)
@@ -530,6 +637,157 @@ func title_screen(heading: String, bb: String, btn: String) -> void:
 	_main_button = b
 	await _result
 	_close_overlay()
+
+
+func ship_builder(cfg: Dictionary, opts: Array, on_change: Callable) -> Dictionary:
+	if auto.is_valid():
+		return cfg
+	_clear(overlay_center)
+	overlay.visible = true
+	var old_col := overlay.color
+	overlay.color = Color(0.02, 0.03, 0.08, 0.0)
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(1600, 880)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay_center.add_child(holder)
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _style(Color(0.05, 0.08, 0.17, 0.95), Color(0.35, 0.55, 0.95), 14, 20))
+	card.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	card.offset_bottom = -16
+	card.custom_minimum_size = Vector2(1500, 0)
+	holder.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	card.add_child(box)
+	box.add_child(_label("Design your spacecraft", 30, Color("e6efff")))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 30)
+	grid.add_theme_constant_override("v_separation", 6)
+	box.add_child(grid)
+	var rows := {}
+	for o in opts:
+		var cell := VBoxContainer.new()
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.add_theme_constant_override("separation", 2)
+		cell.add_child(_label(o.label, 17, Color("a9b9dd")))
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 6)
+		cell.add_child(hb)
+		var key: String = o.key
+		rows[key] = {}
+		for ch in o.choices:
+			var b := _btn(ch[1])
+			b.toggle_mode = true
+			b.custom_minimum_size = Vector2(0, 40)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.add_theme_font_size_override("font_size", 18)
+			if ch.size() > 2:
+				var col := Color(ch[2])
+				b.add_theme_color_override("font_color", col)
+				b.add_theme_color_override("font_pressed_color", col)
+				b.add_theme_color_override("font_hover_color", col)
+				b.add_theme_color_override("font_hover_pressed_color", col)
+			var val: String = ch[0]
+			b.button_pressed = str(cfg.get(key, "")) == val
+			b.pressed.connect(func():
+				cfg[key] = val
+				for k2 in rows[key]:
+					(rows[key][k2] as Button).set_pressed_no_signal(k2 == val)
+				on_change.call(cfg))
+			hb.add_child(b)
+			rows[key][val] = b
+		grid.add_child(cell)
+	var bottom := HBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 12)
+	box.add_child(bottom)
+	var rnd := _btn("Surprise me")
+	rnd.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rnd.pressed.connect(func():
+		for o in opts:
+			var ch: Array = o.choices[randi() % o.choices.size()]
+			cfg[o.key] = ch[0]
+			for k2 in rows[o.key]:
+				(rows[o.key][k2] as Button).set_pressed_no_signal(k2 == ch[0])
+		on_change.call(cfg))
+	bottom.add_child(rnd)
+	var go := _btn("Done   [Enter]", true)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	go.pressed.connect(func(): _result.emit("__go"))
+	bottom.add_child(go)
+	_main_button = go
+	on_change.call(cfg)
+	await _result
+	overlay.color = old_col
+	_close_overlay()
+	return cfg
+
+
+func ship_select(ships: Array, current: String, on_preview: Callable) -> String:
+	if auto.is_valid():
+		return current
+	_clear(overlay_center)
+	overlay.visible = true
+	var old_col := overlay.color
+	overlay.color = Color(0.02, 0.03, 0.08, 0.0)
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(1600, 880)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay_center.add_child(holder)
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _style(Color(0.05, 0.08, 0.17, 0.95), Color(0.35, 0.55, 0.95), 14, 22))
+	card.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	card.offset_bottom = -24
+	card.custom_minimum_size = Vector2(1500, 0)
+	holder.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	card.add_child(box)
+	box.add_child(_label("Choose your spacecraft", 34, Color("e6efff")))
+	box.add_child(_rich("All designs fly the same way. This only changes how your ship looks. Use 1-3 or click, then Enter.", 19))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	var sel := [current]
+	var btns := {}
+	var i := 0
+	for sh in ships:
+		i += 1
+		var b := _btn("")
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(280, 120)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var m := MarginContainer.new()
+		m.set_anchors_preset(Control.PRESET_FULL_RECT)
+		m.add_theme_constant_override("margin_left", 14)
+		m.add_theme_constant_override("margin_top", 8)
+		m.add_theme_constant_override("margin_right", 14)
+		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		m.add_child(_rich("[b]%d.  %s[/b]\n[color=#a9b9dd]%s[/color]" % [i, sh.name, sh.desc], 17))
+		b.add_child(m)
+		var sid: String = sh.id
+		b.button_pressed = sid == current
+		b.pressed.connect(func():
+			sel[0] = sid
+			for k in btns:
+				(btns[k] as Button).set_pressed_no_signal(k == sid)
+			on_preview.call(sid))
+		row.add_child(b)
+		btns[sid] = b
+		_buttons.append(b)
+	var go := _btn("Continue   [Enter]", true)
+	go.pressed.connect(func(): _result.emit("__go"))
+	box.add_child(go)
+	_main_button = go
+	on_preview.call(current)
+	await _result
+	overlay.color = old_col
+	_close_overlay()
+	return sel[0]
 
 
 func crew_select(crew: Array) -> Array:

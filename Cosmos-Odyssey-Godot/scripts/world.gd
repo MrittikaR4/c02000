@@ -29,6 +29,7 @@ var path_nodes: Array = []
 var sun_glow1: MeshInstance3D
 var halo: MeshInstance3D
 var comet_pos: Vector3
+var obstacles: Array = []   # {pos, r}: solid things a route must not cross
 
 
 static func orbit_pos(r: float, a: float, y: float = 0.0) -> Vector3:
@@ -111,6 +112,7 @@ func _build_stars() -> void:
 	mi.extra_cull_margin = 16384.0
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+	stars_node = mi
 
 
 func _sphere(r: float, seg: int = 48, rings: int = 24) -> SphereMesh:
@@ -138,6 +140,16 @@ func _build_sun() -> void:
 	light.omni_attenuation = 0.0
 	root.add_child(light)
 	_add_label("Sun", sun, 30.0, false)
+	obstacles.append({"pos": Vector3.ZERO, "r": 30.0})
+
+
+var orbit_lines: Array = []
+var stars_node: Node3D
+
+
+func set_orbits(on: bool) -> void:
+	for l in orbit_lines:
+		l.visible = on
 
 
 func _orbit_line(r: float, color: Color = Color("2a3b66"), alpha: float = 0.7) -> void:
@@ -151,6 +163,7 @@ func _orbit_line(r: float, color: Color = Color("2a3b66"), alpha: float = 0.7) -
 	mi.material_override = Gfx.unshaded_mat(Color(color.r * 1.8, color.g * 1.8, color.b * 1.8, alpha))
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
+	orbit_lines.append(mi)
 
 
 func _planet(pname: String, r: float, mat: Material, pos: Vector3, spin: float = 0.06, tilt: float = 0.25, atmos: Color = Color(0, 0, 0, 0), rings: bool = false, label: bool = true, major: bool = false) -> Node3D:
@@ -182,6 +195,7 @@ func _planet(pname: String, r: float, mat: Material, pos: Vector3, spin: float =
 		rm.rotation.x = 0.45
 		g.add_child(rm)
 	root.add_child(g)
+	obstacles.append({"pos": pos, "r": r * (2.4 if rings else 1.1)})
 	spinners.append({"mesh": mesh, "speed": spin})
 	if label:
 		_add_label(pname, g, r + 2.5, major)
@@ -265,6 +279,7 @@ func _build_comet() -> void:
 	g.add_child(Gfx.glow(Color("aad7ff"), 16.0, 0.8))
 	root.add_child(g)
 	bodies["comet"] = g
+	obstacles.append({"pos": comet_pos, "r": 3.5})
 	spinners.append({"mesh": rock, "speed": 0.4})
 	_add_label("Comet", g, 5.0, true)
 	# orbit path
@@ -354,6 +369,7 @@ func _build_blackhole() -> void:
 	bh.add_child(halo)
 	bh.add_child(Gfx.glow(Color("ff963c"), 130.0, 0.35))
 	root.add_child(bh)
+	obstacles.append({"pos": bh.position, "r": 44.0})
 	_add_label("Black hole (simulation)", bh, 24.0, true)
 
 
@@ -415,6 +431,23 @@ func curve(i0: int, i1: int, pid: String) -> Array:
 	var d := Vector2(m.x, m.z).length()
 	if d < 75.0:
 		c += side * ((75.0 - d) * 2.2)
+	# Keep the ship out of every planet, the Sun, the comet and the black hole.
+	for _i in 30:
+		var worst := 0.0
+		var push := Vector3.ZERO
+		for k in range(1, 60):
+			var p := bez(a, c, b, float(k) / 60.0)
+			for o in obstacles:
+				var off: Vector3 = p - o.pos
+				var pen: float = (o.r + 4.0) - off.length()
+				if pen > worst:
+					worst = pen
+					push = Vector3(off.x, 0, off.z)
+					if push.length() < 0.01:
+						push = side
+		if worst <= 0.0:
+			break
+		c += push.normalized() * worst * 1.6
 	return [a, c, b]
 
 
@@ -439,26 +472,63 @@ func show_paths(i0: int, i1: int, only: String = "") -> void:
 		if only != "" and only != pid:
 			continue
 		var cp := curve(i0, i1, pid)
+		var pts: Array = []
+		var cum: Array = []
+		var total := 0.0
+		for k in 301:
+			var p := bez(cp[0], cp[1], cp[2], float(k) / 300.0)
+			if k > 0:
+				total += p.distance_to(pts[k - 1])
+			pts.append(p)
+			cum.append(total)
+		var dash := 3.0
+		var gap := 2.0
+		var n := int(total / (dash + gap)) + 1
+		var cap := CapsuleMesh.new()
+		cap.radius = 0.4
+		cap.height = dash + cap.radius * 2.0
+		cap.radial_segments = 8
+		cap.rings = 2
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		var s := SphereMesh.new()
-		s.radius = 0.9
-		s.height = 1.8
-		s.radial_segments = 8
-		s.rings = 4
-		mm.mesh = s
-		var pts: Array = []
-		for k in 91:
-			if k % 3 != 2:
-				pts.append(bez(cp[0], cp[1], cp[2], float(k) / 90.0))
-		mm.instance_count = pts.size()
-		for k in pts.size():
-			mm.set_instance_transform(k, Transform3D(Basis(), pts[k]))
+		mm.mesh = cap
+		mm.instance_count = n
+		var idx := 0
+		for d in n:
+			var s0 := float(d) * (dash + gap)
+			var s1 := s0 + dash
+			if s1 > total:
+				break
+			var pa: Vector3 = _at_len(pts, cum, s0)
+			var pb: Vector3 = _at_len(pts, cum, s1)
+			var t := (pb - pa).normalized()
+			var x := t.cross(Vector3.UP).normalized()
+			if x.length() < 0.01:
+				x = Vector3.RIGHT
+			var z := x.cross(t).normalized()
+			mm.set_instance_transform(idx, Transform3D(Basis(x, t, z), (pa + pb) * 0.5))
+			idx += 1
+		mm.visible_instance_count = idx
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm
 		mmi.material_override = Gfx.unshaded_mat(PATH_COL[pid])
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(mmi)
 		path_nodes.append(mmi)
+
+
+func _at_len(pts: Array, cum: Array, s: float) -> Vector3:
+	var lo := 0
+	var hi := cum.size() - 1
+	while hi - lo > 1:
+		var mid := (lo + hi) / 2
+		if cum[mid] < s:
+			lo = mid
+		else:
+			hi = mid
+	var span: float = cum[hi] - cum[lo]
+	var f: float = 0.0 if span <= 0.0001 else (s - cum[lo]) / span
+	return (pts[lo] as Vector3).lerp(pts[hi], f)
 
 
 func update(dt: float, t: float) -> void:

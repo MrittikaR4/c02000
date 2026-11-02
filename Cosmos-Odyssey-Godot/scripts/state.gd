@@ -4,7 +4,6 @@ extends RefCounted
 const Data = preload("res://scripts/data.gd")
 
 var power: int = 100
-var budget: int = 120
 var days: int = 0
 var science: int = 0
 var crew: Array = []
@@ -47,7 +46,7 @@ func power_units() -> int:
 
 func path_cost(p: Dictionary) -> Dictionary:
 	var mult := 1.0 + float(100 - h.thrusters) / 150.0
-	return {"power": ceili(float(p.power) * mult), "budget": p.budget, "days": p.days}
+	return {"power": ceili(float(p.power) * mult), "days": p.days}
 
 
 func scan_gain(base: int) -> int:
@@ -71,14 +70,14 @@ func damage(id: String, amount: float, source: String) -> int:
 
 func repair_info() -> Dictionary:
 	if has("engineer"):
-		return {"cost": 7, "amount": 25}
-	return {"cost": 10, "amount": 20}
+		return {"cost": 4, "amount": 25}
+	return {"cost": 6, "amount": 20}
 
 
 func repair(id: String) -> int:
 	var info := repair_info()
 	var accurate: bool = id == "shield" and known_shield == h.shield
-	budget -= info.cost
+	power -= info.cost
 	h[id] = mini(100, h[id] + info.amount)
 	if accurate:
 		known_shield = h.shield
@@ -86,7 +85,7 @@ func repair(id: String) -> int:
 
 
 func inspect_shield() -> int:
-	budget -= 4
+	power -= 2
 	days += 2
 	known_shield = h.shield
 	shield_checked_day = days
@@ -108,8 +107,6 @@ func check_fail() -> String:
 		failed = "The hull broke apart."
 	elif power <= 0:
 		failed = "Out of power. Life support shut down."
-	elif budget < 0:
-		failed = "Budget exhausted. Mission control cancelled the flight."
 	elif days > Data.MAX_DAYS:
 		failed = "Mission deadline passed. Supplies ran out."
 	return failed
@@ -137,7 +134,7 @@ func score(tier: String) -> int:
 	for x in Data.SUBS:
 		total += h[x.id]
 	var avg: float = total / Data.SUBS.size()
-	var base: float = science * 5.0 + power + budget + roundf(avg) + maxf(0.0, Data.MAX_DAYS - days) / 5.0
+	var base: float = science * 5.0 + power + roundf(avg) + maxf(0.0, Data.MAX_DAYS - days) / 5.0
 	var mult := 0.0
 	match tier:
 		"perfect": mult = 1.0

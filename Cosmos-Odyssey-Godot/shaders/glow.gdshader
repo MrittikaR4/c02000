@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, blend_add, cull_disabled, depth_draw_never;
+render_mode unshaded, blend_add, cull_disabled, depth_draw_never, fog_disabled;
 // Billboard radial glow. Use on a QuadMesh; always faces the camera.
 uniform vec3 tint : source_color = vec3(1.0, 0.8, 0.5);
 uniform float opacity = 1.0;

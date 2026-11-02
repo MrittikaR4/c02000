@@ -13,6 +13,28 @@ const SUBS := [
 	{"id": "life", "name": "Life support", "effect": "If life support reaches zero the crew is lost."},
 ]
 
+const SHIPS := [
+	{"id": "orbiter", "name": "Orbiter", "desc": "White spaceplane with delta wings and twin engines. Balanced and easy to read."},
+	{"id": "capsule", "name": "Capsule", "desc": "Crew capsule with a gold service module and long solar wings. Classic deep-space look."},
+	{"id": "probe", "name": "Sun Probe", "desc": "Small bus hiding behind a huge flat heat shield, like the real Parker Solar Probe."},
+	{"id": "custom", "name": "Design your own", "desc": "Choose the body, wings, tail fin, engines, nozzles and colours yourself."},
+]
+
+const SHIP_DEFAULT := {"body": "classic", "wings": "delta", "wing_size": "medium", "fin": "single", "engines": "2",
+	"nozzle": "medium", "panels": "wing", "hull_col": "pearl", "accent": "blue"}
+
+const SHIP_OPTS := [
+	{"key": "body", "label": "Body", "choices": [["slim", "Slim"], ["classic", "Classic"], ["stout", "Stout"]]},
+	{"key": "wings", "label": "Wings", "choices": [["none", "None"], ["delta", "Delta"], ["straight", "Straight"], ["swept", "Swept"]]},
+	{"key": "wing_size", "label": "Wing size", "choices": [["small", "Small"], ["medium", "Medium"], ["large", "Large"]]},
+	{"key": "fin", "label": "Tail fin", "choices": [["none", "None"], ["single", "Single"], ["twin", "Twin"], ["tall", "Tall"]]},
+	{"key": "engines", "label": "Engines", "choices": [["1", "1"], ["2", "2"], ["3", "3"]]},
+	{"key": "nozzle", "label": "Thruster nozzle", "choices": [["small", "Small"], ["medium", "Medium"], ["large", "Large"]]},
+	{"key": "panels", "label": "Solar panels", "choices": [["wing", "On wings"], ["boom", "Side booms"]]},
+	{"key": "hull_col", "label": "Hull colour", "choices": [["pearl", "Pearl", "eef1f6"], ["red", "Red", "d8484e"], ["orange", "Orange", "f0903a"], ["steel", "Steel", "9aa6b8"], ["navy", "Navy", "3a4f8a"], ["green", "Green", "5fae7a"]]},
+	{"key": "accent", "label": "Accent / flame", "choices": [["blue", "Blue", "4f9bff"], ["orange", "Orange", "ff9a4a"], ["green", "Green", "5dff9e"], ["pink", "Pink", "ff7ad0"], ["red", "Red", "ff6a5a"]]},
+]
+
 const CREW := [
 	{"id": "pilot", "name": "Pilot", "desc": "Steers 25% better through asteroid fields."},
 	{"id": "engineer", "name": "Engineer", "desc": "Repairs cost less and fix more."},
@@ -21,9 +43,9 @@ const CREW := [
 ]
 
 const PATHS := {
-	"fast": {"label": "Fast burn", "power": 10, "budget": 12, "days": 15, "speed": 76.0, "note": "faster asteroids"},
-	"normal": {"label": "Normal route", "power": 7, "budget": 8, "days": 25, "speed": 56.0, "note": ""},
-	"ellipse": {"label": "Elliptical orbit", "power": 3, "budget": 6, "days": 45, "speed": 42.0, "note": "gravity assist, slow"},
+	"fast": {"label": "Fast burn", "power": 10, "days": 15, "speed": 76.0, "note": "faster asteroids"},
+	"normal": {"label": "Normal route", "power": 7, "days": 25, "speed": 56.0, "note": ""},
+	"ellipse": {"label": "Elliptical orbit", "power": 3, "days": 45, "speed": 42.0, "note": "gravity assist, slow"},
 }
 
 # Power recharged on arrival (before the solar array factor).
