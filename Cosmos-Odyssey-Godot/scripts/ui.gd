@@ -638,6 +638,46 @@ func title_screen(heading: String, bb: String, btn: String) -> void:
 	await _result
 	_close_overlay()
 
+const INTRO_PAGES := [
+	{
+		"title": "From Uncharted Seas to Uncharted Skies",
+		"text": "An exciting, interactive space simulation that takes you on an incredible journey through the wonders and challenges of space exploration.\n\nFrom executing a successful [b]Mars landing[/b] to exploring the mysteries of [b]black holes[/b] and discovering the wonders of our [b]solar system[/b], every mission challenges you to think critically, make informed decisions, overcome unexpected obstacles, and apply scientific knowledge.",
+	},
+	{
+		"title": "Our Goal",
+		"text": "Through immersive simulations and mission-based challenges, we aim to make space science exciting, inspire curiosity, and encourage the next generation of [b]explorers, scientists, and innovators[/b].\n\n[i]From uncharted seas to uncharted skies.[/i]",
+	},
+]
+
+
+## Multi-page story intro. pages = [{"title": "...", "text": "..."}, ...]
+## Call `await ui.intro()` to show the default pages (INTRO_PAGES above),
+## or pass your own pages. Each page has a Next/Begin button (Enter/Space/controller
+## work as usual) and a "Skip intro" button on every page except the last.
+## Does nothing during bot play (auto).
+func intro(pages: Array = INTRO_PAGES) -> void:
+	if auto.is_valid():
+		return
+	var i := 0
+	for p in pages:
+		i += 1
+		var last := i == pages.size()
+		var box := _overlay_card(920)
+		box.add_child(_label(p.title, 40, Color("e6efff")))
+		box.add_child(_rich(p.text, 21))
+		var b := _btn(("Begin" if last else "Next") + "   [Enter]", true)
+		b.pressed.connect(func(): _result.emit("ok"))
+		box.add_child(b)
+		_main_button = b
+		if not last:
+			var skip := _btn("Skip intro")
+			skip.pressed.connect(func(): _result.emit("__skip"))
+			box.add_child(skip)
+		var r = await _result
+		_close_overlay()
+		if r == "__skip":
+			return
+
 
 func ship_builder(cfg: Dictionary, opts: Array, on_change: Callable) -> Dictionary:
 	if auto.is_valid():
